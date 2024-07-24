@@ -17,6 +17,7 @@
 package eccpow
 
 import (
+	"fmt"
 	"bytes"
 	"context"
 	crand "crypto/rand"
@@ -109,6 +110,22 @@ func (ecc *ECC) Seal(chain consensus.ChainHeaderReader, block *types.Block, resu
 		}(i, uint64(ecc.rand.Int63()))
 	}
 
+	pend.Add(1)
+	go func() {
+		defer pend.Done()
+		log.Info(fmt.Sprintf("Hashrate: %f", ecc.Hashrate()))
+	loop:
+		for {
+			timer := time.NewTimer(time.Second * 60)
+			select {
+			case <-stop:
+				break loop
+			case <-timer.C:
+				log.Info(fmt.Sprintf("Hashrate: %f", ecc.Hashrate()))
+			}
+		}
+	}()
+
 	// Wait until sealing is terminated or a nonce is found
 	go func() {
 		var result *types.Block
@@ -167,7 +184,7 @@ search:
 			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
 			total_attempts = total_attempts + 64
 			attempts = attempts + 64
-			if (attempts % (1 << 15)) == 0 {
+			if (attempts % (1 << 5)) == 0 {
 				ecc.hashrate.Mark(attempts)
 				attempts = 0
 			}
@@ -252,7 +269,7 @@ search:
 			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
 			total_attempts = total_attempts + 1
 			attempts = attempts + 1
-			if (attempts % (1 << 15)) == 0 {
+			if (attempts % (1 << 5)) == 0 {
 				ecc.hashrate.Mark(attempts)
 				attempts = 0
 			}
